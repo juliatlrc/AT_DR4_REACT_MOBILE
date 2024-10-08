@@ -8,7 +8,7 @@ import {
   Divider,
   Text,
 } from "react-native-paper";
-import firestore from "@react-native-firebase/firestore";
+import firestore from "firebase/firestore";
 import { useRoute } from "@react-navigation/native"; // Para capturar o ID da requisição
 
 const CadastroCotacoes = () => {

@@ -5,7 +5,8 @@ import {
   StyleSheet,
   ScrollView,
   ActivityIndicator,
-  FlatList,
+  Alert,
+  RefreshControl,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { getAuth } from "firebase/auth";
@@ -16,6 +17,7 @@ import {
   getDocs,
   query,
   where,
+  deleteDoc,
 } from "firebase/firestore";
 import { db } from "../firebase/config";
 
@@ -82,12 +84,56 @@ const ProductWithCotacoes = ({ produto, cotacoes }) => (
   </View>
 );
 
+// Componente que exibe as requisições de compra para colaboradores
+const RequisicaoColaborador = ({ requisicao, onDelete }) => {
+  const handleDelete = () => {
+    Alert.alert(
+      "Excluir Requisição",
+      "Tem certeza que deseja excluir essa requisição?",
+      [
+        {
+          text: "Cancelar",
+          style: "cancel",
+        },
+        {
+          text: "Excluir",
+          onPress: () => onDelete(requisicao.id),
+        },
+      ]
+    );
+  };
+
+  return (
+    <View style={styles.requisicaoCard}>
+      <View style={styles.cardHeader}>
+        <Icon name="assignment" size={30} color="#3f51b5" />
+        <Text style={styles.productName}>{requisicao.descricao}</Text>
+      </View>
+      <Text style={styles.cotacaoText}>
+        Produto: {requisicao.nomeProduto || "Não especificado"}
+      </Text>
+      <Text style={styles.cotacaoText}>
+        Quantidade: {requisicao.quantidade}
+      </Text>
+      <Text style={styles.cotacaoText}>
+        Status: {requisicao.statusPedido || "A esperar"}
+      </Text>
+
+      <Icon.Button name="delete" backgroundColor="red" onPress={handleDelete}>
+        Excluir
+      </Icon.Button>
+    </View>
+  );
+};
+
 const Home = () => {
   const { isColaborador, isAdmin, loading } = useUserPermissions();
   const [produtos, setProdutos] = useState([]);
   const [allCotacoes, setAllCotacoes] = useState([]);
+  const [requisicoes, setRequisicoes] = useState([]);
+  const [refreshing, setRefreshing] = useState(false); // Adiciona o estado para "pull to refresh"
 
-  // Fetch produtos e cotações
+  // Fetch produtos e cotações para admin
   useEffect(() => {
     if (isAdmin) {
       const fetchData = async () => {
@@ -115,6 +161,50 @@ const Home = () => {
     }
   }, [isAdmin]);
 
+  // Fetch requisições para colaborador
+  const fetchRequisicoes = async () => {
+    try {
+      const auth = getAuth();
+      const user = auth.currentUser;
+
+      const q = query(
+        collection(db, "requisicoes"),
+        where("uidColaborador", "==", user.uid)
+      );
+      const querySnapshot = await getDocs(q);
+      const requisicoesList = querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      setRequisicoes(requisicoesList);
+    } catch (error) {
+      console.error("Erro ao buscar requisições: ", error);
+    }
+    setRefreshing(false); // Finaliza o estado de refresh
+  };
+
+  useEffect(() => {
+    if (isColaborador) {
+      fetchRequisicoes();
+    }
+  }, [isColaborador]);
+
+  // Função para excluir uma requisição
+  const handleDeleteRequisicao = async (id) => {
+    try {
+      await deleteDoc(doc(db, "requisicoes", id));
+      setRequisicoes(requisicoes.filter((req) => req.id !== id));
+    } catch (error) {
+      console.error("Erro ao excluir requisição:", error);
+    }
+  };
+
+  // Função para recarregar a página com "pull to refresh"
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchRequisicoes();
+  };
+
   // Filtra as cotações de acordo com o produto
   const getCotacoesForProduct = (produto) => {
     return allCotacoes.filter(
@@ -125,7 +215,13 @@ const Home = () => {
   if (loading) return <LoadingIndicator />;
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView
+      contentContainerStyle={styles.container}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+      }
+    >
+      {/* Exibe produtos e cotações para admin */}
       {isAdmin && (
         <>
           <Text style={styles.adminTitle}>Lista de Produtos com Cotações</Text>
@@ -135,6 +231,20 @@ const Home = () => {
               key={produto.id}
               produto={produto}
               cotacoes={getCotacoesForProduct(produto)}
+            />
+          ))}
+        </>
+      )}
+
+      {/* Exibe requisições para colaborador */}
+      {isColaborador && (
+        <>
+          <Text style={styles.adminTitle}>Minhas Requisições de Compra</Text>
+          {requisicoes.map((requisicao) => (
+            <RequisicaoColaborador
+              key={requisicao.id}
+              requisicao={requisicao}
+              onDelete={handleDeleteRequisicao}
             />
           ))}
         </>
@@ -166,6 +276,16 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   productCard: {
+    backgroundColor: "#fff",
+    borderRadius: 10,
+    padding: 15,
+    marginBottom: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  requisicaoCard: {
     backgroundColor: "#fff",
     borderRadius: 10,
     padding: 15,
