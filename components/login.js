@@ -51,7 +51,9 @@ const Login = () => {
       await saveSession(email, password);
 
       // Navegar diretamente para a tela principal (sem verificar status)
-      navigation.navigate("Main", { screen: "Home" });
+      navigation.navigate("Main", { screen: "Home" } || "Main", {
+        screen: "EditEmployeeProfile",
+      });
     } catch (error) {
       setError("Erro ao fazer login. Verifique suas credenciais.");
     }
